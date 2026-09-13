@@ -623,7 +623,9 @@ async function openChapter(mid,tid,cid,tomo,cap){
  if(!target)return;
  readerControlsHidden=wasReaderOpen?wasControlsHidden:false;document.body.classList.toggle('reader-controls-hidden',readerControlsHidden);
  target.innerHTML=normalReaderHtml(mid,tid,cid,tomo,cap,pages,nav,index,previous,next,totalChapters);
- updateEyeButton();updateFullscreenButton();setupChapterEndPrompt(target,mid,cid);
+ updateEyeButton();updateFullscreenButton();const isLastOfTomo=!next||next.tomoId!==tid;
+const nextTomo=next&&next.tomoId!==tid?next:null;
+setupChapterEndPrompt(target,mid,cid,{isLastOfTomo,tomoNum:tomo,mangaName:nav.mangaName,nextTomo});
  restoreNormalProgress(mid,tid,cid,pages.length,target);
  setupNormalProgress(target,mid,tid,cid);
  mountSocial(cid);
@@ -635,7 +637,134 @@ function normalReaderHtml(mid,tid,cid,tomo,cap,pages,nav,index,previous,next,tot
 ${socialPanelHtml(cid)}
 </div>`;}
 
-function setupChapterEndPrompt(target,mangaId,chapterId){if(!target)return;if(target._endPromptCleanup)target._endPromptCleanup();const prompt=target.querySelector('#chapter-end-prompt');if(!prompt)return;const isFullscreen=()=>document.fullscreenElement===target||document.webkitFullscreenElement===target;const getScrollMetrics=()=>isFullscreen()?{top:target.scrollTop,height:target.scrollHeight,view:target.clientHeight}:{top:window.scrollY,height:document.documentElement.scrollHeight,view:window.innerHeight};const check=()=>{const m=getScrollMetrics(),nearBottom=(m.top+m.view)>=m.height-120;if(nearBottom&&chapterId)markChapterRead(chapterId,mangaId);const showEndPrompt=nearBottom&&readerControlsHidden;prompt.classList.toggle('show',showEndPrompt);target.classList.toggle('chapter-at-end',showEndPrompt);target.querySelectorAll('.reader-side-nav').forEach(el=>el.style.display=showEndPrompt?'none':'');const bottom=target.querySelector('.chapter-bottom-nav');if(bottom)bottom.style.display=showEndPrompt?'none':'';prompt.style.display=showEndPrompt?'flex':'';};const onWindowScroll=()=>{if(!isFullscreen())check()},onTargetScroll=()=>{if(isFullscreen())check()};window.addEventListener('scroll',onWindowScroll,{passive:true});target.addEventListener('scroll',onTargetScroll,{passive:true});window.addEventListener('resize',check,{passive:true});target._checkChapterEnd=check;target._endPromptCleanup=()=>{window.removeEventListener('scroll',onWindowScroll);target.removeEventListener('scroll',onTargetScroll);window.removeEventListener('resize',check)};check();}
+
+async function loadMangaCredits(mangaId){
+  if(!mangaId)return [];
+  try{
+    const {data:rels,error}=await supabaseClient.from('manga_creditos').select('grupo_id,rol,orden').eq('manga_id',mangaId).order('orden');
+    if(error)throw error;
+    const ids=(rels||[]).map(r=>r.grupo_id);
+    if(!ids.length)return [];
+    const {data:grupos,error:ge}=await supabaseClient.from('grupos_traduccion').select('id,nombre,logo_url').in('id',ids);
+    if(ge)throw ge;
+    const map=new Map((grupos||[]).map(g=>[g.id,g]));
+    return (rels||[]).map(r=>{
+      const g=map.get(r.grupo_id);
+      if(!g)return null;
+      return {id:g.id,nombre:g.nombre,logo_url:g.logo_url,rol:r.rol||'',orden:r.orden};
+    }).filter(Boolean);
+  }catch(e){console.warn('credits',e);return [];}
+}
+
+function creditsOverlayHtml(credits,tomoNum,mangaName,opts={}){
+  if(!credits||!credits.length)return '';
+  const nextBtn=opts.nextLabel?`<button type="button" class="credits-btn primary" data-credits-next="1">${escapeHtml(opts.nextLabel)}</button>`:'';
+  const backBtn=opts.backLabel?`<button type="button" class="credits-btn" data-credits-back="1">${escapeHtml(opts.backLabel)}</button>`:'';
+  return `<div class="credits-overlay" id="credits-overlay">
+    <div class="credits-card">
+      <div class="credits-kicker">Fin del Tomo ${escapeHtml(String(tomoNum||''))}</div>
+      <h2 class="credits-title">Créditos</h2>
+      ${mangaName?`<div class="credits-manga">${escapeHtml(mangaName)}</div>`:''}
+      <div class="credits-list">
+        ${credits.map(g=>`
+          <div class="credits-item">
+            ${g.logo_url?`<img class="credits-logo" src="${escapeHtml(g.logo_url)}" alt="">`:`<div class="credits-logo placeholder"></div>`}
+            <div class="credits-meta">
+              <div class="credits-name">${escapeHtml(g.nombre)}</div>
+              ${g.rol?`<div class="credits-role">${escapeHtml(g.rol)}</div>`:''}
+            </div>
+          </div>`).join('')}
+      </div>
+      <div class="credits-actions">${backBtn}${nextBtn}<button type="button" class="credits-btn ghost" data-credits-close="1">Cerrar</button></div>
+    </div>
+  </div>`;
+}
+
+async function showTomoCredits(mangaId,tomoNum,opts={}){
+  const credits=await loadMangaCredits(mangaId);
+  if(!credits.length){
+    if(typeof opts.onEmpty==='function') opts.onEmpty();
+    return false;
+  }
+  // Quitar overlay previo
+  document.getElementById('credits-overlay')?.remove();
+  const host=opts.host||document.body;
+  const wrap=document.createElement('div');
+  wrap.innerHTML=creditsOverlayHtml(credits,tomoNum,opts.mangaName||'',{
+    nextLabel:opts.nextLabel||'',
+    backLabel:opts.backLabel||''
+  });
+  const overlay=wrap.firstElementChild;
+  host.appendChild(overlay);
+  // bloquear scroll detrás un poco
+  const close=()=>{overlay.remove(); if(typeof opts.onClose==='function')opts.onClose();};
+  overlay.querySelector('[data-credits-close]')?.addEventListener('click',close);
+  overlay.querySelector('[data-credits-back]')?.addEventListener('click',()=>{
+    overlay.remove();
+    if(typeof opts.onBack==='function')opts.onBack();
+  });
+  overlay.querySelector('[data-credits-next]')?.addEventListener('click',()=>{
+    overlay.remove();
+    if(typeof opts.onNext==='function')opts.onNext();
+  });
+  // clic fuera de la card cierra
+  overlay.addEventListener('click',(e)=>{if(e.target===overlay)close();});
+  return true;
+}
+
+function setupChapterEndPrompt(target,mangaId,chapterId,ctx={}){
+  if(!target)return;
+  if(target._endPromptCleanup)target._endPromptCleanup();
+  const prompt=target.querySelector('#chapter-end-prompt');
+  if(!prompt)return;
+  const isLastOfTomo=!!ctx.isLastOfTomo;
+  const tomoNum=ctx.tomoNum;
+  const mangaName=ctx.mangaName||'';
+  let creditsShown=false;
+  const isFullscreen=()=>document.fullscreenElement===target||document.webkitFullscreenElement===target;
+  const getScrollMetrics=()=>isFullscreen()
+    ?{top:target.scrollTop,height:target.scrollHeight,view:target.clientHeight}
+    :{top:window.scrollY,height:document.documentElement.scrollHeight,view:window.innerHeight};
+  const check=async()=>{
+    const m=getScrollMetrics();
+    const nearBottom=(m.top+m.view)>=m.height-120;
+    if(nearBottom&&chapterId) markChapterRead(chapterId,mangaId);
+    const showEndPrompt=nearBottom&&readerControlsHidden;
+    prompt.classList.toggle('show',showEndPrompt);
+    target.classList.toggle('chapter-at-end',showEndPrompt);
+    target.querySelectorAll('.reader-side-nav').forEach(el=>el.style.display=showEndPrompt?'none':'');
+    // Créditos solo al terminar el tomo (último capítulo del tomo)
+    if(nearBottom&&isLastOfTomo&&!creditsShown&&mangaId){
+      creditsShown=true;
+      await showTomoCredits(mangaId,tomoNum,{
+        mangaName,
+        host:target,
+        nextLabel: ctx.nextTomo ? 'Siguiente tomo' : 'Volver al manga',
+        backLabel: 'Seguir aquí',
+        onNext: ()=>{
+          if(ctx.nextTomo){
+            openChapter(mangaId,ctx.nextTomo.tomoId,ctx.nextTomo.id,ctx.nextTomo.tomo,ctx.nextTomo.cap);
+          }else{
+            openManga(mangaId);
+          }
+        }
+      });
+    }
+  };
+  const onWindowScroll=()=>check();
+  const onTargetScroll=()=>check();
+  window.addEventListener('scroll',onWindowScroll,{passive:true});
+  target.addEventListener('scroll',onTargetScroll,{passive:true});
+  window.addEventListener('resize',check);
+  target._checkChapterEnd=check;
+  target._endPromptCleanup=()=>{
+    window.removeEventListener('scroll',onWindowScroll);
+    target.removeEventListener('scroll',onTargetScroll);
+    window.removeEventListener('resize',check);
+  };
+  check();
+}
+
 function eyeOpenIcon(){return '<svg class="eye-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>'}
 function eyeClosedIcon(){return '<svg class="eye-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M4.5 9.5C6.3 7.4 8.8 6 12 6c6.5 0 10 6 10 6-.9 1.5-2.1 2.8-3.5 3.8M4.5 9.5C3 10.7 2 12 2 12s3.5 6 10 6c1.3 0 2.5-.2 3.6-.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'}
 function updateEyeButton(){const btn=document.getElementById('reader-eye-toggle');if(!btn)return;btn.innerHTML=readerControlsHidden?eyeClosedIcon():eyeOpenIcon();btn.setAttribute('aria-label',readerControlsHidden?'Mostrar menú':'Ocultar menú');btn.setAttribute('title',readerControlsHidden?'Mostrar menú':'Ocultar menú');btn.classList.toggle('closed',readerControlsHidden);}
@@ -1392,14 +1521,37 @@ async function bookNext(){
     }
   }
 
+  // Fin del tomo en modo libro → créditos (si hay) y luego siguiente tomo o menú
   const i=s.navTomos.findIndex(t=>t.id===s.tid);
-  if(i>=0&&i<s.navTomos.length-1){
-    await openBookTomo(s.mid,s.navTomos[i+1].id,{direction:'next',animateOpen:false});
-  }else{
-    // Último tomo: cerrar y volver al menú del manga
-    const mid=s.mid;
-    await closeBookAnimated();
-    await openManga(mid);
+  const hasNextTomo=i>=0&&i<s.navTomos.length-1;
+  const tomoNum=s.book?.tomo?.numero ?? '';
+  const mid=s.mid;
+  const nextTid=hasNextTomo?s.navTomos[i+1].id:null;
+  const host=document.querySelector('.book-reader-page')||document.body;
+  const shown=await showTomoCredits(mid,tomoNum,{
+    mangaName:s.mangaName||'',
+    host,
+    nextLabel: hasNextTomo ? 'Siguiente tomo' : 'Volver al manga',
+    backLabel: 'Quedarme aquí',
+    onNext: async ()=>{
+      if(hasNextTomo){
+        await openBookTomo(mid,nextTid,{direction:'next',animateOpen:false});
+      }else{
+        await closeBookAnimated();
+        await openManga(mid);
+      }
+    },
+    onEmpty: async ()=>{
+      if(hasNextTomo){
+        await openBookTomo(mid,nextTid,{direction:'next',animateOpen:false});
+      }else{
+        await closeBookAnimated();
+        await openManga(mid);
+      }
+    }
+  });
+  if(!shown){
+    // showTomoCredits ya llamó onEmpty si no había créditos
   }
 }
 
