@@ -531,8 +531,11 @@ body.reader-mode.reader-controls-hidden .reader-eye-toggle{
 }
 
 /* El aviso final solo puede aparecer con el menú oculto; JS controla su estado al llegar al final. */
-body.reader-mode:not(.reader-controls-hidden) .chapter-end-prompt{
-  display:none !important;
+/* Fin de capítulo visible también con menú (créditos / navegación) */
+body.reader-mode:not(.reader-controls-hidden) .chapter-end-prompt.show{
+  display:flex !important;
+  opacity:1;
+  pointer-events:auto;
 }
 
 @media(max-width:600px){
@@ -1571,24 +1574,45 @@ body.book-panning{
 .manga-detail-head .manga-author-name{font-size:14px}
 .manga-detail-head .manga-author-full{font-size:12px}
 
-/* Créditos al terminar un tomo */
+/* Créditos al terminar un tomo — visibles con menú oculto y en pantalla completa */
 .credits-overlay{
   position:fixed !important;
-  inset:0 !important;
-  z-index:2147483000 !important;
-  background:rgba(0,0,0,.78);
-  display:flex;
+  left:0 !important;
+  top:0 !important;
+  right:0 !important;
+  bottom:0 !important;
+  width:100% !important;
+  height:100% !important;
+  z-index:2147483646 !important;
+  display:flex !important;
   align-items:center;
   justify-content:center;
   padding:16px;
+  box-sizing:border-box;
+  background:rgba(0,0,0,.84) !important;
   opacity:0;
-  transition:opacity .18s ease;
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
-  pointer-events:auto;
+  transition:opacity .15s ease;
+  pointer-events:auto !important;
+  visibility:visible !important;
+  margin:0 !important;
+  transform:none !important;
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
 }
 .credits-overlay.visible{
-  opacity:1;
+  opacity:1 !important;
+}
+body.reader-mode.reader-controls-hidden .credits-overlay,
+body.book-mode.reader-controls-hidden .credits-overlay,
+.chapter-reader-page:fullscreen .credits-overlay,
+.chapter-reader-page:-webkit-full-screen .credits-overlay,
+.book-reader-page:fullscreen .credits-overlay,
+.book-reader-page:-webkit-full-screen .credits-overlay{
+  display:flex !important;
+  opacity:1 !important;
+  visibility:visible !important;
+  pointer-events:auto !important;
+  z-index:2147483646 !important;
 }
 .credits-card{
   width:min(440px,100%);
@@ -1600,11 +1624,8 @@ body.book-panning{
   padding:22px 20px 18px;
   box-shadow:0 20px 50px rgba(0,0,0,.55);
   color:#eee;
-  transform:translateY(8px) scale(.98);
-  transition:transform .18s ease;
-}
-.credits-overlay.visible .credits-card{
-  transform:none;
+  position:relative;
+  z-index:1;
 }
 .credits-kicker{
   font-size:12px;
@@ -1680,37 +1701,3 @@ body.book-panning{
 .credits-btn.primary{background:#e53945;color:#fff}
 .credits-btn.ghost{background:transparent;border:1px solid #555;color:#ccc}
 .credits-btn:hover{filter:brightness(1.08)}
-
-
-/* Créditos: NUNCA se ocultan con el menú (ojo) ni dependen del toolbar */
-body.reader-mode.reader-controls-hidden .credits-overlay,
-body.book-mode.reader-controls-hidden .credits-overlay,
-body.reader-mode .credits-overlay,
-body.book-mode .credits-overlay,
-.chapter-reader-page:fullscreen .credits-overlay,
-.chapter-reader-page:-webkit-full-screen .credits-overlay,
-.book-reader-page:fullscreen .credits-overlay,
-.book-reader-page:-webkit-full-screen .credits-overlay{
-  display:flex !important;
-  visibility:visible !important;
-  opacity:1 !important;
-  pointer-events:auto !important;
-  z-index:2147483000 !important;
-}
-/* Si el overlay aún no tiene .visible, mantener transición pero no forzar opacity 0 por menú */
-.credits-overlay:not(.visible){
-  opacity:0;
-}
-.credits-overlay.visible{
-  opacity:1 !important;
-}
-/* Dentro de fullscreen el overlay debe cubrir el elemento fullscreen */
-.chapter-reader-page .credits-overlay,
-.book-reader-page .credits-overlay,
-.chapter-reader-page:fullscreen .credits-overlay,
-.chapter-reader-page:-webkit-full-screen .credits-overlay,
-.book-reader-page:fullscreen .credits-overlay,
-.book-reader-page:-webkit-full-screen .credits-overlay{
-  position:absolute !important;
-  inset:0 !important;
-}

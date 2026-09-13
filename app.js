@@ -639,6 +639,7 @@ ${socialPanelHtml(cid)}
 
 
 
+
 async function loadMangaCredits(mangaId){
   if(!mangaId)return [];
   try{
@@ -662,10 +663,10 @@ function creditsOverlayHtml(credits,tomoNum,mangaName,opts={}){
   const nextBtn=opts.nextLabel?`<button type="button" class="credits-btn primary" data-credits-next="1">${escapeHtml(opts.nextLabel)}</button>`:'';
   const backBtn=opts.backLabel?`<button type="button" class="credits-btn" data-credits-back="1">${escapeHtml(opts.backLabel)}</button>`:'';
   const empty=list.length?'':`<div class="credits-empty">No hay grupos de créditos asignados a este manga.</div>`;
-  return `<div class="credits-overlay" id="credits-overlay" role="dialog" aria-modal="true" aria-label="Créditos del tomo">
+  return `<div class="credits-overlay" id="credits-overlay" role="dialog" aria-modal="true" aria-label="Fin del tomo">
     <div class="credits-card">
       <div class="credits-kicker">Fin del Tomo ${escapeHtml(String(tomoNum??''))}</div>
-      <h2 class="credits-title">Créditos</h2>
+      <h2 class="credits-title">${list.length?'Créditos':'Tomo terminado'}</h2>
       ${mangaName?`<div class="credits-manga">${escapeHtml(mangaName)}</div>`:''}
       <div class="credits-list">
         ${list.map(g=>`
@@ -683,67 +684,92 @@ function creditsOverlayHtml(credits,tomoNum,mangaName,opts={}){
   </div>`;
 }
 
-/** Muestra créditos al terminar un tomo.
- *  No forma parte del menú (no se oculta con el ojo).
- *  En pantalla completa se monta DENTRO del elemento fullscreen para que se vea.
- */
+
+function getCreditsHost(){
+  // En pantalla completa SOLO se ve lo que está DENTRO del elemento fullscreen.
+  const fs=document.fullscreenElement||document.webkitFullscreenElement||null;
+  if(fs) return fs;
+  const page=document.querySelector('.chapter-reader-page, .book-reader-page');
+  return page||document.body;
+}
+
+function placeCreditsOverlay(overlay){
+  const host=getCreditsHost();
+  // Quitar de donde estuviera
+  if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  host.appendChild(overlay);
+  // fixed: en fullscreen se ancla al viewport del elemento fullscreen (no al scroll)
+  const isFsHost=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  overlay.style.cssText=[
+    'position:fixed',
+    'left:0','top:0','right:0','bottom:0',
+    'width:100%','height:100%',
+    'z-index:2147483646',
+    'display:flex','align-items:center','justify-content:center',
+    'padding:16px','box-sizing:border-box',
+    'background:rgba(0,0,0,.84)',
+    'opacity:1','visibility:visible','pointer-events:auto',
+    'margin:0','transform:none'
+  ].join(';');
+  // Si el host no es body y no está en FS, fixed puede anclarse mal en algunos casos:
+  // forzar el host a relative y usar fixed igual (cubre el viewport).
+  if(host!==document.body){
+    try{
+      const cs=getComputedStyle(host);
+      if(cs.position==='static') host.style.position='relative';
+    }catch(_){}
+  }
+  overlay.classList.add('visible');
+  return host;
+}
+
+/** Panel de fin de tomo / créditos. Visible también en pantalla completa. */
 async function showTomoCredits(mangaId,tomoNum,opts={}){
-  // Evitar duplicados
   document.getElementById('credits-overlay')?.remove();
-  const credits=await loadMangaCredits(mangaId);
-  if(!credits.length){
+  let credits=[];
+  try{ credits=await loadMangaCredits(mangaId); }catch(_){ credits=[]; }
+
+  if(!credits.length && opts.skipIfEmpty){
     if(typeof opts.onEmpty==='function') opts.onEmpty();
     return false;
   }
+
   const wrap=document.createElement('div');
   wrap.innerHTML=creditsOverlayHtml(credits,tomoNum,opts.mangaName||'',{
-    nextLabel:opts.nextLabel||'',
-    backLabel:opts.backLabel||''
+    nextLabel:opts.nextLabel||'Continuar',
+    backLabel:opts.backLabel||'Seguir aquí'
   });
   const overlay=wrap.firstElementChild;
-  // Host: si hay fullscreen, el overlay DEBE vivir dentro de ese nodo
-  // (si no, el navegador no lo muestra en pantalla completa).
-  const fs=document.fullscreenElement||document.webkitFullscreenElement||null;
-  const host=fs || opts.host || document.body;
-  // Asegurar que el host pueda contener fixed/absolute
-  if(host!==document.body){
-    const cs=window.getComputedStyle(host);
-    if(cs.position==='static') host.style.position='relative';
-  }
-  host.appendChild(overlay);
-  overlay.offsetHeight;
-  overlay.classList.add('visible');
-  // Marcar que no es UI de menú
-  overlay.dataset.notMenu='1';
+  placeCreditsOverlay(overlay);
 
-  const close=()=>{
-    overlay.classList.remove('visible');
-    setTimeout(()=>overlay.remove(),180);
-    if(typeof opts.onClose==='function') opts.onClose();
+  // Si el usuario entra/sale de fullscreen con el panel abierto, reubicar
+  const onFsChange=()=>{
+    if(!document.getElementById('credits-overlay')){
+      document.removeEventListener('fullscreenchange',onFsChange);
+      document.removeEventListener('webkitfullscreenchange',onFsChange);
+      return;
+    }
+    placeCreditsOverlay(overlay);
   };
-  overlay.querySelector('[data-credits-close]')?.addEventListener('click',(e)=>{e.stopPropagation();close();});
-  overlay.querySelector('[data-credits-back]')?.addEventListener('click',(e)=>{
-    e.stopPropagation();
-    overlay.classList.remove('visible');
-    setTimeout(()=>overlay.remove(),180);
-    if(typeof opts.onBack==='function') opts.onBack();
-  });
-  overlay.querySelector('[data-credits-next]')?.addEventListener('click',(e)=>{
-    e.stopPropagation();
+  document.addEventListener('fullscreenchange',onFsChange);
+  document.addEventListener('webkitfullscreenchange',onFsChange);
+
+  const teardown=(fn)=>{
+    document.removeEventListener('fullscreenchange',onFsChange);
+    document.removeEventListener('webkitfullscreenchange',onFsChange);
     overlay.classList.remove('visible');
     setTimeout(()=>{
       overlay.remove();
-      if(typeof opts.onNext==='function') opts.onNext();
+      if(typeof fn==='function') fn();
     },120);
-  });
-  overlay.addEventListener('click',(e)=>{if(e.target===overlay)close();});
+  };
+  overlay.querySelector('[data-credits-close]')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();teardown(opts.onClose);});
+  overlay.querySelector('[data-credits-back]')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();teardown(opts.onBack);});
+  overlay.querySelector('[data-credits-next]')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();teardown(opts.onNext);});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)teardown(opts.onClose);});
   return true;
 }
 
-/**
- * Modo normal: al llegar al final del último capítulo del tomo muestra créditos una vez.
- * La flecha › del final del tomo también abre créditos en vez de saltar directo.
- */
 function setupChapterEndPrompt(target,mangaId,chapterId,ctx={}){
   if(!target)return;
   if(target._endPromptCleanup)target._endPromptCleanup();
@@ -758,27 +784,26 @@ function setupChapterEndPrompt(target,mangaId,chapterId,ctx={}){
   const isFullscreen=()=>document.fullscreenElement===target||document.webkitFullscreenElement===target;
   const getScrollMetrics=()=>isFullscreen()
     ?{top:target.scrollTop,height:target.scrollHeight,view:target.clientHeight}
-    :{top:window.scrollY,height:document.documentElement.scrollHeight,view:window.innerHeight};
+    :{top:window.scrollY||document.documentElement.scrollTop,height:Math.max(document.documentElement.scrollHeight,target.scrollHeight),view:window.innerHeight};
 
-  const openCredits=async(fromNav)=>{
+  const goNextAfterCredits=()=>{
+    const nextTomo=ctx.nextTomo;
+    if(nextTomo) openChapter(mangaId,nextTomo.tomoId,nextTomo.id,nextTomo.tomo,nextTomo.cap);
+    else openManga(mangaId);
+  };
+
+  const openCredits=async()=>{
     if(creditsBusy)return;
-    if(creditsShown&&document.getElementById('credits-overlay'))return;
     creditsBusy=true;
     try{
-      const nextTomo=ctx.nextTomo;
-      const shown=await showTomoCredits(mangaId,tomoNum,{
+      // Quitar overlay invisible/stale (p.ej. quedó arriba del scroll en FS)
+      document.getElementById('credits-overlay')?.remove();
+      await showTomoCredits(mangaId,tomoNum,{
         mangaName,
-        nextLabel: nextTomo ? 'Siguiente tomo' : 'Volver al manga',
+        nextLabel: ctx.nextTomo ? 'Siguiente tomo' : 'Volver al manga',
         backLabel: 'Seguir leyendo',
-        onNext: ()=>{
-          if(nextTomo){
-            openChapter(mangaId,nextTomo.tomoId,nextTomo.id,nextTomo.tomo,nextTomo.cap);
-          }else{
-            openManga(mangaId);
-          }
-        }
+        onNext: goNextAfterCredits
       });
-      // Marcar siempre tras el intento para no spamear el overlay
       creditsShown=true;
     }finally{
       creditsBusy=false;
@@ -787,42 +812,39 @@ function setupChapterEndPrompt(target,mangaId,chapterId,ctx={}){
 
   const check=()=>{
     const m=getScrollMetrics();
-    const nearBottom=(m.top+m.view)>=(m.height-140);
+    const nearBottom=(m.top+m.view)>=(m.height-160);
     if(nearBottom&&chapterId) markChapterRead(chapterId,mangaId);
-    const showEndPrompt=nearBottom&&readerControlsHidden;
+    // Aviso de fin de capítulo (flechas) — independiente de créditos
+    const showEndPrompt=nearBottom; // visible con o sin menú
     prompt.classList.toggle('show',showEndPrompt);
     target.classList.toggle('chapter-at-end',showEndPrompt);
-    target.querySelectorAll('.reader-side-nav').forEach(el=>{
-      if(showEndPrompt) el.style.display='none';
-      else el.style.removeProperty('display');
-    });
-    // Auto-mostrar créditos solo una vez al llegar al fondo del último cap del tomo
     if(nearBottom&&isLastOfTomo&&!creditsShown&&!creditsBusy&&mangaId){
-      openCredits(false);
+      openCredits();
     }
   };
 
-  // Interceptar flechas › cuando es fin de tomo → créditos primero
+  // Reemplazar onclick de botones › al fin de tomo (más fiable que interceptar)
   if(isLastOfTomo){
-    const intercept=(ev)=>{
-      const btn=ev.target.closest('.chapter-end-arrow.chapter-end-next, .chapter-nav-btn, .reader-side-nav.reader-side-next');
-      if(!btn)return;
-      // solo botones de avanzar
+    const nextBtns=target.querySelectorAll(
+      '.chapter-end-arrow.chapter-end-next, .reader-side-nav.reader-side-next, .chapter-bottom-nav .chapter-nav-btn'
+    );
+    nextBtns.forEach(btn=>{
+      // el de la izquierda del bottom nav es ‹ — saltarlo
       if(btn.classList.contains('chapter-end-prev')||btn.classList.contains('reader-side-prev'))return;
-      if(btn.classList.contains('disabled')||btn.hasAttribute('disabled'))return;
-      // Si el botón es el de "siguiente" del final de este capítulo/tomo
-      const isNext=
-        btn.classList.contains('chapter-end-next')||
-        btn.classList.contains('reader-side-next')||
-        (btn.classList.contains('chapter-nav-btn')&&btn.textContent.includes('›'));
-      if(!isNext)return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      openCredits(true);
-    };
-    // capture phase para ganar al onclick inline
-    target.addEventListener('click',intercept,true);
-    target._creditsIntercept=intercept;
+      if(btn.classList.contains('chapter-nav-btn')){
+        // en bottom nav hay dos .chapter-nav-btn; el primero es prev
+        const siblings=[...btn.parentElement.querySelectorAll('.chapter-nav-btn')];
+        if(siblings[0]===btn)return;
+      }
+      btn.removeAttribute('onclick');
+      btn.disabled=false;
+      btn.classList.remove('disabled');
+      btn.onclick=e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        openCredits();
+      };
+    });
   }
 
   const onWindowScroll=()=>check();
@@ -830,16 +852,19 @@ function setupChapterEndPrompt(target,mangaId,chapterId,ctx={}){
   window.addEventListener('scroll',onWindowScroll,{passive:true});
   target.addEventListener('scroll',onTargetScroll,{passive:true});
   window.addEventListener('resize',check);
+  document.addEventListener('fullscreenchange',check);
+  document.addEventListener('webkitfullscreenchange',check);
   target._checkChapterEnd=check;
   target._endPromptCleanup=()=>{
     window.removeEventListener('scroll',onWindowScroll);
     target.removeEventListener('scroll',onTargetScroll);
     window.removeEventListener('resize',check);
-    if(target._creditsIntercept) target.removeEventListener('click',target._creditsIntercept,true);
-    // no dejar overlay huérfano al cambiar de capítulo
+    document.removeEventListener('fullscreenchange',check);
+    document.removeEventListener('webkitfullscreenchange',check);
     document.getElementById('credits-overlay')?.remove();
   };
-  check();
+  // Retrasar un poco el primer check para que el layout/fullscreen esté listo
+  setTimeout(check,80);
 }
 
 function eyeOpenIcon(){return '<svg class="eye-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>'}
@@ -1604,7 +1629,7 @@ async function bookNext(){
   const tomoNum=s.book?.tomo?.numero ?? '';
   const mid=s.mid;
   const nextTid=hasNextTomo?s.navTomos[i+1].id:null;
-  const shown=await showTomoCredits(mid,tomoNum,{
+  await showTomoCredits(mid,tomoNum,{
     mangaName:s.mangaName||'',
     nextLabel: hasNextTomo ? 'Siguiente tomo' : 'Volver al manga',
     backLabel: 'Quedarme aquí',
@@ -1615,19 +1640,8 @@ async function bookNext(){
         await closeBookAnimated();
         await openManga(mid);
       }
-    },
-    onEmpty: async ()=>{
-      if(hasNextTomo){
-        await openBookTomo(mid,nextTid,{direction:'next',animateOpen:false});
-      }else{
-        await closeBookAnimated();
-        await openManga(mid);
-      }
     }
   });
-  if(!shown){
-    // showTomoCredits ya llamó onEmpty si no había créditos
-  }
 }
 
 async function bookPrev(){
