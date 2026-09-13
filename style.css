@@ -1513,3 +1513,60 @@ body.book-panning{
   -webkit-user-drag: none !important;
   touch-action: none;
 }
+
+/* Autores junto al manga */
+.manga-authors{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:8px 0 4px;
+}
+.manga-author{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:999px;
+  padding:4px 10px 4px 4px;
+  max-width:100%;
+}
+.manga-author-avatar{
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  object-fit:cover;
+  background:#222;
+  flex:none;
+}
+.manga-author-meta{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  line-height:1.2;
+}
+.manga-author-name{
+  font-size:12px;
+  font-weight:700;
+  color:#eee;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.manga-author-full{
+  font-size:10px;
+  color:#999;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.card .manga-authors{margin:6px 0 2px}
+.card .manga-author-avatar{width:24px;height:24px}
+.manga-detail-head .manga-authors{margin:10px 0 12px}
+.manga-detail-head .manga-author{
+  padding:6px 12px 6px 6px;
+  background:rgba(255,255,255,.08);
+}
+.manga-detail-head .manga-author-avatar{width:36px;height:36px}
+.manga-detail-head .manga-author-name{font-size:14px}
+.manga-detail-head .manga-author-full{font-size:12px}

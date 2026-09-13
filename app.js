@@ -431,7 +431,28 @@ async function loadMangas(){
      const tag=tagMap.get(link.etiqueta_id);
      if(tag){if(!byManga.has(link.manga_id))byManga.set(link.manga_id,[]);byManga.get(link.manga_id).push(tag);}
    }
-   mangas=rows.map(m=>({...m,tags:(byManga.get(m.id)||[]).sort((a,b)=>a.nombre.localeCompare(b.nombre))}));
+   // Autores
+   let byAutorManga=new Map();
+   try{
+     const {data:alinks}=await supabaseClient.from('manga_autores').select('manga_id,autor_id').in('manga_id',ids);
+     const autorIds=[...new Set((alinks||[]).map(x=>x.autor_id).filter(Boolean))];
+     let autores=[];
+     if(autorIds.length){
+       const {data:aRows}=await supabaseClient.from('autores').select('id,nombre,nombre_completo,imagen_url').in('id',autorIds);
+       autores=aRows||[];
+     }
+     const amap=new Map(autores.map(a=>[a.id,a]));
+     for(const link of (alinks||[])){
+       const a=amap.get(link.autor_id);
+       if(a){if(!byAutorManga.has(link.manga_id))byAutorManga.set(link.manga_id,[]);byAutorManga.get(link.manga_id).push(a);}
+     }
+   }catch(ae){console.warn('autores',ae)}
+
+   mangas=rows.map(m=>({
+     ...m,
+     tags:(byManga.get(m.id)||[]).sort((a,b)=>a.nombre.localeCompare(b.nombre)),
+     autores:(byAutorManga.get(m.id)||[]).sort((a,b)=>a.nombre.localeCompare(b.nombre))
+   }));
    renderHome(mangas);
  }catch(error){
    console.error('LeeMangasCross: error cargando mangas',error);
@@ -456,13 +477,29 @@ function chapterModeMenu(){return `
  </div>
 </section>`;}
 
-function renderTags(m){return getMangaTags(m).length?`<div class="manga-tags">${getMangaTags(m).map(t=>`<span class="tag">${escapeHtml(t.nombre)}</span>`).join('')}</div>`:'';}
+function renderTags(m){return getMangaTags(m).length?`<div class="manga-tags">${getMangaTags(m).map(t=>`<span class="tag">${escapeHtml(t.nombre)}</span>`).join('')}</div>`:''}
+function getMangaAuthors(m){
+  if(Array.isArray(m?.autores)&&m.autores.length)return m.autores;
+  return [];
+}
+function renderAuthors(m){
+  const list=getMangaAuthors(m);
+  if(!list.length)return '';
+  return `<div class="manga-authors">${list.map(a=>`
+    <div class="manga-author">
+      <img class="manga-author-avatar" src="${escapeHtml(a.imagen_url||'')}" alt="">
+      <div class="manga-author-meta">
+        <span class="manga-author-name">${escapeHtml(a.nombre||'')}</span>
+        ${a.nombre_completo?`<span class="manga-author-full">${escapeHtml(a.nombre_completo)}</span>`:''}
+      </div>
+    </div>`).join('')}</div>`;
+}
 function renderHome(list){
  const filtered=list;
  app.innerHTML=`<h1>Todos los mangas</h1>${chapterModeMenu()}
- ${filtered.length?'<div class="grid">'+filtered.map(m=>`<article class="card" onclick="openManga('${m.id}')"><img src="${escapeHtml(m.portada_url||'')}" alt=""><h3>${escapeHtml(m.nombre)}</h3>${renderTags(m)}</article>`).join('')+'</div>':'<div class="empty">No hay mangas en este modo todavía.</div>'}`;
+ ${filtered.length?'<div class="grid">'+filtered.map(m=>`<article class="card" onclick="openManga('${m.id}')"><img src="${escapeHtml(m.portada_url||'')}" alt=""><h3>${escapeHtml(m.nombre)}</h3>${renderAuthors(m)}${renderTags(m)}</article>`).join('')+'</div>':'<div class="empty">No hay mangas en este modo todavía.</div>'}`;
 }
-function filterMangas(){const q=(document.getElementById('search')?.value||'').toLowerCase().trim();const list=mangas.filter(m=>m.nombre.toLowerCase().includes(q)||getMangaTags(m).some(t=>t.nombre.toLowerCase().includes(q)));renderHome(list);}
+function filterMangas(){const q=(document.getElementById('search')?.value||'').toLowerCase().trim();const list=mangas.filter(m=>m.nombre.toLowerCase().includes(q)||getMangaTags(m).some(t=>t.nombre.toLowerCase().includes(q))||getMangaAuthors(m).some(a=>(a.nombre||'').toLowerCase().includes(q)||(a.nombre_completo||'').toLowerCase().includes(q)));renderHome(list);}
 async function goHome(){
   history.pushState({},'',location.pathname);
   const s=document.getElementById('search');
@@ -505,12 +542,29 @@ async function openManga(id){
  const {data:m,error:mangaError}=await supabaseClient.from('mangas').select('*').eq('id',id).single();
  if(mangaError||!m){app.innerHTML='<div class="empty">No se pudo cargar el manga.<br><small>'+escapeHtml(mangaError?.message||'Error desconocido')+'</small><br><button onclick="openManga(\''+id+'\')">↻ Reintentar</button></div>';return}
  m.tags=getMangaTags(m);
+ // Autores (desde caché o consulta)
+ if(!Array.isArray(m.autores)){
+   try{
+     const cached=mangas.find(x=>x.id===id);
+     if(cached?.autores) m.autores=cached.autores;
+     else {
+       const {data:links}=await supabaseClient.from('manga_autores').select('autor_id').eq('manga_id',id);
+       const ids=(links||[]).map(l=>l.autor_id);
+       if(ids.length){
+         const {data:as}=await supabaseClient.from('autores').select('id,nombre,nombre_completo,imagen_url').in('id',ids);
+         m.autores=as||[];
+       } else m.autores=[];
+     }
+   }catch(_){ m.autores=[]; }
+ }
  const {data:ts}=await supabaseClient.from('tomos').select('*').eq('manga_id',id).order('numero');
  const tagHtml=renderTags(m);
+ const authorHtml=renderAuthors(m);
 
  const headHtml=`<button class="back" onclick="goHome()">← Inicio</button>
 <div class="manga-detail-head">
   <h1 class="manga-detail-title">${escapeHtml(m.nombre)}</h1>
+  ${authorHtml}
   ${m.descripcion?`<p class="manga-desc">${escapeHtml(m.descripcion)}</p>`:''}
   ${tagHtml}
 </div>`;
