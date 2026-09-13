@@ -683,7 +683,10 @@ function creditsOverlayHtml(credits,tomoNum,mangaName,opts={}){
   </div>`;
 }
 
-/** Muestra créditos al terminar un tomo. Siempre en body (fixed) para evitar el bug del modo normal. */
+/** Muestra créditos al terminar un tomo.
+ *  No forma parte del menú (no se oculta con el ojo).
+ *  En pantalla completa se monta DENTRO del elemento fullscreen para que se vea.
+ */
 async function showTomoCredits(mangaId,tomoNum,opts={}){
   // Evitar duplicados
   document.getElementById('credits-overlay')?.remove();
@@ -698,11 +701,20 @@ async function showTomoCredits(mangaId,tomoNum,opts={}){
     backLabel:opts.backLabel||''
   });
   const overlay=wrap.firstElementChild;
-  // Siempre fixed sobre toda la ventana (no dentro del reader)
-  document.body.appendChild(overlay);
-  // Forzar paint
+  // Host: si hay fullscreen, el overlay DEBE vivir dentro de ese nodo
+  // (si no, el navegador no lo muestra en pantalla completa).
+  const fs=document.fullscreenElement||document.webkitFullscreenElement||null;
+  const host=fs || opts.host || document.body;
+  // Asegurar que el host pueda contener fixed/absolute
+  if(host!==document.body){
+    const cs=window.getComputedStyle(host);
+    if(cs.position==='static') host.style.position='relative';
+  }
+  host.appendChild(overlay);
   overlay.offsetHeight;
   overlay.classList.add('visible');
+  // Marcar que no es UI de menú
+  overlay.dataset.notMenu='1';
 
   const close=()=>{
     overlay.classList.remove('visible');

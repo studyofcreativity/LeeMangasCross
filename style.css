@@ -1680,3 +1680,37 @@ body.book-panning{
 .credits-btn.primary{background:#e53945;color:#fff}
 .credits-btn.ghost{background:transparent;border:1px solid #555;color:#ccc}
 .credits-btn:hover{filter:brightness(1.08)}
+
+
+/* Créditos: NUNCA se ocultan con el menú (ojo) ni dependen del toolbar */
+body.reader-mode.reader-controls-hidden .credits-overlay,
+body.book-mode.reader-controls-hidden .credits-overlay,
+body.reader-mode .credits-overlay,
+body.book-mode .credits-overlay,
+.chapter-reader-page:fullscreen .credits-overlay,
+.chapter-reader-page:-webkit-full-screen .credits-overlay,
+.book-reader-page:fullscreen .credits-overlay,
+.book-reader-page:-webkit-full-screen .credits-overlay{
+  display:flex !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+  z-index:2147483000 !important;
+}
+/* Si el overlay aún no tiene .visible, mantener transición pero no forzar opacity 0 por menú */
+.credits-overlay:not(.visible){
+  opacity:0;
+}
+.credits-overlay.visible{
+  opacity:1 !important;
+}
+/* Dentro de fullscreen el overlay debe cubrir el elemento fullscreen */
+.chapter-reader-page .credits-overlay,
+.book-reader-page .credits-overlay,
+.chapter-reader-page:fullscreen .credits-overlay,
+.chapter-reader-page:-webkit-full-screen .credits-overlay,
+.book-reader-page:fullscreen .credits-overlay,
+.book-reader-page:-webkit-full-screen .credits-overlay{
+  position:absolute !important;
+  inset:0 !important;
+}
