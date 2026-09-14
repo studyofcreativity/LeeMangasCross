@@ -626,6 +626,7 @@ async function openChapter(mid,tid,cid,tomo,cap){
  updateEyeButton();updateFullscreenButton();const isLastOfTomo=!next||next.tomoId!==tid;
 const nextTomo=next&&next.tomoId!==tid?next:null;
 setupChapterEndPrompt(target,mid,cid,{isLastOfTomo,tomoNum:tomo,mangaName:nav.mangaName,nextTomo});
+ prioritizePageLoading(target);
  restoreNormalProgress(mid,tid,cid,pages.length,target);
  setupNormalProgress(target,mid,tid,cid);
  mountSocial(cid);
@@ -633,7 +634,15 @@ setupChapterEndPrompt(target,mid,cid,{isLastOfTomo,tomoNum:tomo,mangaName:nav.ma
 }
 function normalReaderHtml(mid,tid,cid,tomo,cap,pages,nav,index,previous,next,totalChapters){return `
 <aside class="reader-toolbar"><div class="toolbar-title">Lectura</div><div class="toolbar-section"><div class="toolbar-label">Tamaño</div><button class="size-btn ${readerSize==='chico'?'active':''}" onclick="setReaderSize('chico')">Chico</button><button class="size-btn ${readerSize==='normal'?'active':''}" onclick="setReaderSize('normal')">Normal</button><button class="size-btn ${readerSize==='grande'?'active':''}" onclick="setReaderSize('grande')">Grande</button><button class="size-btn ${readerSize==='muy-grande'?'active':''}" onclick="setReaderSize('muy-grande')">Muy grande</button></div><div class="toolbar-section"><div class="toolbar-label">Ancho</div><button class="width-btn ${readerWidth==='estrecho'?'active':''}" onclick="setReaderWidth('estrecho')">Estrecho</button><button class="width-btn ${readerWidth==='normal'?'active':''}" onclick="setReaderWidth('normal')">Normal</button><button class="width-btn ${readerWidth==='gordo'?'active':''}" onclick="setReaderWidth('gordo')">Gordo</button><button class="width-btn ${readerWidth==='muy-gordo'?'active':''}" onclick="setReaderWidth('muy-gordo')">Muy gordo</button></div><div class="toolbar-section toolbar-fullscreen"><button id="fullscreenBtn" class="fullscreen-btn" onclick="toggleFullscreen()">⛶ Pantalla completa</button></div><div class="toolbar-section"><button class="reader-book-switch" onclick="readerMode='libro';localStorage.setItem('lfm_reader_mode','libro');openBookChapter('${mid}','${tid}','${cid}',${tomo},${cap})">📕 Modo Libro</button></div></aside>
-<div class="chapter-reader-content"><button class="back" onclick="openTomo('${mid}','${tid}',${tomo})">← Volver al tomo</button><div class="reader-header reader-meta-top"><div class="reader-meta-title-row"><div class="reader-meta-name">${escapeHtml(nav.mangaName)}</div><button id="reader-eye-toggle" class="reader-eye-toggle" type="button" onclick="toggleReaderControls()" aria-label="${readerControlsHidden?'Mostrar menú':'Ocultar menú'}" title="${readerControlsHidden?'Mostrar menú':'Ocultar menú'}">${readerControlsHidden?eyeClosedIcon():eyeOpenIcon()}</button></div><div class="reader-meta-location">Tomo ${escapeHtml(String(tomo))} · Capítulo ${escapeHtml(String(cap))}</div></div><button class="reader-side-nav reader-side-prev ${previous?'':'disabled'}" ${previous?`onclick="openChapter('${mid}','${previous.tomoId}','${previous.id}',${previous.tomo},${previous.cap})"`:'disabled'} aria-label="Capítulo anterior">‹</button><button class="reader-side-nav reader-side-next ${next?'':'disabled'}" ${next?`onclick="openChapter('${mid}','${next.tomoId}','${next.id}',${next.tomo},${next.cap})"`:'disabled'} aria-label="Capítulo siguiente">›</button>${socialBarHtml(cid)}<div class="reader-wrap"><div id="reader" class="reader size-${readerSize} width-${readerWidth}">${pages.map(p=>`<img loading="lazy" src="${escapeHtml(p.imagen_url)}" alt="Página ${escapeHtml(String(p.numero))}" data-page-number="${p.numero}">`).join('')||'<div class="empty">Este capítulo no tiene páginas.</div>'}</div></div><div class="chapter-bottom-nav"><button class="chapter-nav-btn ${previous?'':'disabled'}" ${previous?`onclick="openChapter('${mid}','${previous.tomoId}','${previous.id}',${previous.tomo},${previous.cap})"`:'disabled'}>‹</button><div class="chapter-info"><div class="chapter-manga-name">${escapeHtml(nav.mangaName)}</div><div class="chapter-location">Tomo ${escapeHtml(String(tomo))} · Capítulo ${escapeHtml(String(cap))}</div><div class="chapter-counter">Capítulo ${index>=0?index+1:escapeHtml(String(cap))} de ${totalChapters}</div></div><button class="chapter-nav-btn ${next?'':'disabled'}" ${next?`onclick="openChapter('${mid}','${next.tomoId}','${next.id}',${next.tomo},${next.cap})"`:'disabled'}>›</button></div><div id="chapter-end-prompt" class="chapter-end-prompt" aria-live="polite"><button class="chapter-end-arrow chapter-end-prev ${previous?'':'disabled'}" ${previous?`onclick="openChapter('${mid}','${previous.tomoId}','${previous.id}',${previous.tomo},${previous.cap})"`:'disabled'}>‹</button><div class="chapter-end-info"><div class="chapter-end-manga">${escapeHtml(nav.mangaName)}</div><div class="chapter-end-location">Tomo ${escapeHtml(String(tomo))} · Capítulo ${escapeHtml(String(cap))}</div></div><button class="chapter-end-arrow chapter-end-next ${next?'':'disabled'}" ${next?`onclick="openChapter('${mid}','${next.tomoId}','${next.id}',${next.tomo},${next.cap})"`:'disabled'}>›</button></div>
+<div class="chapter-reader-content"><button class="back" onclick="openTomo('${mid}','${tid}',${tomo})">← Volver al tomo</button><div class="reader-header reader-meta-top"><div class="reader-meta-title-row"><div class="reader-meta-name">${escapeHtml(nav.mangaName)}</div><button id="reader-eye-toggle" class="reader-eye-toggle" type="button" onclick="toggleReaderControls()" aria-label="${readerControlsHidden?'Mostrar menú':'Ocultar menú'}" title="${readerControlsHidden?'Mostrar menú':'Ocultar menú'}">${readerControlsHidden?eyeClosedIcon():eyeOpenIcon()}</button></div><div class="reader-meta-location">Tomo ${escapeHtml(String(tomo))} · Capítulo ${escapeHtml(String(cap))}</div></div><button class="reader-side-nav reader-side-prev ${previous?'':'disabled'}" ${previous?`onclick="openChapter('${mid}','${previous.tomoId}','${previous.id}',${previous.tomo},${previous.cap})"`:'disabled'} aria-label="Capítulo anterior">‹</button><button class="reader-side-nav reader-side-next ${next?'':'disabled'}" ${next?`onclick="openChapter('${mid}','${next.tomoId}','${next.id}',${next.tomo},${next.cap})"`:'disabled'} aria-label="Capítulo siguiente">›</button>${socialBarHtml(cid)}<div class="reader-wrap"><div id="reader" class="reader size-${readerSize} width-${readerWidth}">${pages.map((p,i)=>{
+  const eager=i<5;
+  const prio=i<2?'high':(i<5?'auto':'low');
+  // Las de arriba: src inmediato. Las de abajo: data-src (se cargan después en orden).
+  if(eager){
+    return `<img class="reader-page-img" loading="eager" fetchpriority="${prio}" decoding="async" src="${escapeHtml(p.imagen_url)}" alt="Página ${escapeHtml(String(p.numero))}" data-page-number="${p.numero}" data-page-index="${i}">`;
+  }
+  return `<img class="reader-page-img reader-page-pending" loading="lazy" fetchpriority="low" decoding="async" data-src="${escapeHtml(p.imagen_url)}" alt="Página ${escapeHtml(String(p.numero))}" data-page-number="${p.numero}" data-page-index="${i}">`;
+}).join('')||'<div class="empty">Este capítulo no tiene páginas.</div>'}</div></div><div class="chapter-bottom-nav"><button class="chapter-nav-btn ${previous?'':'disabled'}" ${previous?`onclick="openChapter('${mid}','${previous.tomoId}','${previous.id}',${previous.tomo},${previous.cap})"`:'disabled'}>‹</button><div class="chapter-info"><div class="chapter-manga-name">${escapeHtml(nav.mangaName)}</div><div class="chapter-location">Tomo ${escapeHtml(String(tomo))} · Capítulo ${escapeHtml(String(cap))}</div><div class="chapter-counter">Capítulo ${index>=0?index+1:escapeHtml(String(cap))} de ${totalChapters}</div></div><button class="chapter-nav-btn ${next?'':'disabled'}" ${next?`onclick="openChapter('${mid}','${next.tomoId}','${next.id}',${next.tomo},${next.cap})"`:'disabled'}>›</button></div><div id="chapter-end-prompt" class="chapter-end-prompt" aria-live="polite"><button class="chapter-end-arrow chapter-end-prev ${previous?'':'disabled'}" ${previous?`onclick="openChapter('${mid}','${previous.tomoId}','${previous.id}',${previous.tomo},${previous.cap})"`:'disabled'}>‹</button><div class="chapter-end-info"><div class="chapter-end-manga">${escapeHtml(nav.mangaName)}</div><div class="chapter-end-location">Tomo ${escapeHtml(String(tomo))} · Capítulo ${escapeHtml(String(cap))}</div></div><button class="chapter-end-arrow chapter-end-next ${next?'':'disabled'}" ${next?`onclick="openChapter('${mid}','${next.tomoId}','${next.id}',${next.tomo},${next.cap})"`:'disabled'}>›</button></div>
 ${socialPanelHtml(cid)}
 </div>`;}
 
@@ -812,10 +821,15 @@ function setupChapterEndPrompt(target,mangaId,chapterId,ctx={}){
 
   const check=()=>{
     const m=getScrollMetrics();
-    const nearBottom=(m.top+m.view)>=(m.height-160);
+    // No considerar "fin" mientras el capítulo aún es más bajo que la pantalla
+    // (pasa cuando solo cargaron pocas imgs / las de abajo primero).
+    const contentTallEnough=m.height > (m.view * 1.25 + 80);
+    const userScrolled=m.top > 40;
+    const atBottom=(m.top+m.view)>=(m.height-160);
+    const nearBottom=contentTallEnough && atBottom && (userScrolled || m.height > m.view * 2);
     if(nearBottom&&chapterId) markChapterRead(chapterId,mangaId);
     // Aviso de fin de capítulo (flechas) — independiente de créditos
-    const showEndPrompt=nearBottom; // visible con o sin menú
+    const showEndPrompt=nearBottom;
     prompt.classList.toggle('show',showEndPrompt);
     target.classList.toggle('chapter-at-end',showEndPrompt);
     if(nearBottom&&isLastOfTomo&&!creditsShown&&!creditsBusy&&mangaId){
@@ -861,10 +875,11 @@ function setupChapterEndPrompt(target,mangaId,chapterId,ctx={}){
     window.removeEventListener('resize',check);
     document.removeEventListener('fullscreenchange',check);
     document.removeEventListener('webkitfullscreenchange',check);
+    if(typeof target._stopPageLoading==='function') target._stopPageLoading();
     document.getElementById('credits-overlay')?.remove();
   };
-  // Retrasar un poco el primer check para que el layout/fullscreen esté listo
-  setTimeout(check,80);
+  // Esperar a que carguen las primeras páginas antes de evaluar "fin de capítulo"
+  setTimeout(check,400);
 }
 
 function eyeOpenIcon(){return '<svg class="eye-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>'}
@@ -1983,6 +1998,56 @@ document.addEventListener('touchend',e=>{
   if(Math.abs(dx)>55){ if(dx<0) bookArrowLeft(); else bookArrowRight(); }
 },{passive:true});
 
+
+
+/** Carga páginas de arriba hacia abajo (evita que el final se cargue primero y dispare “fin de capítulo”). */
+function prioritizePageLoading(root){
+  if(!root)return;
+  const imgs=[...root.querySelectorAll('#reader img.reader-page-img, #reader img')];
+  if(!imgs.length)return;
+
+  // Asegurar atributos de las primeras
+  imgs.forEach((img,i)=>{
+    if(i<5){
+      img.loading='eager';
+      try{img.fetchPriority=i<2?'high':'auto';}catch(_){}
+      if(img.dataset.src && !img.getAttribute('src')){
+        img.src=img.dataset.src;
+        delete img.dataset.src;
+      }
+      img.classList.remove('reader-page-pending');
+    }
+  });
+
+  // Cargar el resto en orden secuencial (arriba → abajo)
+  let idx=5;
+  let stopped=false;
+  const loadOne=()=>{
+    if(stopped||idx>=imgs.length)return;
+    const img=imgs[idx++];
+    if(!img)return;
+    const goNext=()=>{
+      img.classList.remove('reader-page-pending');
+      // pequeña pausa para no saturar la red; sigue en orden
+      setTimeout(loadOne,40);
+    };
+    if(img.dataset.src && !img.getAttribute('src')){
+      img.addEventListener('load',goNext,{once:true});
+      img.addEventListener('error',goNext,{once:true});
+      img.src=img.dataset.src;
+      delete img.dataset.src;
+      img.loading='eager';
+      try{img.fetchPriority='low';}catch(_){}
+    }else{
+      goNext();
+    }
+  };
+  // Empezar la cola cuando las primeras ya pidieron red
+  requestAnimationFrame(()=>setTimeout(loadOne,60));
+
+  // Si el nodo se destruye al cambiar de capítulo, parar
+  root._stopPageLoading=()=>{stopped=true;};
+}
 
 function setupNormalProgress(target,mid,tid,cid){
   if(!target)return;

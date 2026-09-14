@@ -1701,3 +1701,15 @@ body.book-mode.reader-controls-hidden .credits-overlay,
 .credits-btn.primary{background:#e53945;color:#fff}
 .credits-btn.ghost{background:transparent;border:1px solid #555;color:#ccc}
 .credits-btn:hover{filter:brightness(1.08)}
+
+/* Placeholders mientras las páginas de abajo aún no cargan (orden arriba→abajo) */
+.reader img.reader-page-pending,
+.reader img.reader-page-img:not([src]){
+  min-height:min(85vh,900px);
+  background:#121216;
+  display:block;
+  width:100%;
+}
+.reader img.reader-page-img{
+  background:#0a0a0c;
+}
